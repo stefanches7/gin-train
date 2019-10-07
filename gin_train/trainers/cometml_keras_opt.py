@@ -1,4 +1,5 @@
 import abc
+import gin
 import logging
 import pandas
 from comet_ml import Optimizer
@@ -11,6 +12,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 
+@gin.configurable
 class CometMLOptimizerTrainer(KerasTrainer, metaclass=abc.ABCMeta):
 
     optimizer: Optimizer
@@ -29,13 +31,15 @@ class CometMLOptimizerTrainer(KerasTrainer, metaclass=abc.ABCMeta):
           train: training Dataset (object inheriting from kipoi.data.Dataset)
           valid: validation Dataset (object inheriting from kipoi.data.Dataset)
           output_dir: output directory where to log the training
-          cometml_experiment: the name of the CometML project
+          cometml_experiment: an instance of cometml_experiment
         """
         self.modelfactory = modelfactory
         self.optconfig = optconfig
-        self.optimizer = Optimizer(optconfig, project_name = cometml_experiment)
+        self.optimizer = Optimizer(optconfig, project_name=cometml_experiment.project_name,
+                                   workspace=cometml_experiment.workspace)
         self.optimal_experiment = None
-        KerasTrainer.__init__(self, Sequential(), train_dataset, valid_dataset, output_dir, cometml_experiment, wandb_run = None)
+        super(KerasTrainer, self).__init__(Sequential(), train_dataset, valid_dataset, output_dir, cometml_experiment,
+                                           wandb_run=None)
 
     def train(self,
               batch_size=256,
@@ -144,8 +148,9 @@ class CometMLOptimizerTrainer(KerasTrainer, metaclass=abc.ABCMeta):
     def evaluate(self, metric, batch_size=256, num_workers=8, eval_train=False, eval_skip=(), save=True, **kwargs):
         if self.optimal_experiment == None:
             logger.error("There is no optimal experiment to assess. Run at least one training first!")
-        self.model =  construct_model_from_experiment(self.modelfactory, self.optimal_experiment, self.optconfig["parameters"])
-        KerasTrainer.evaluate(self, metric, batch_size, num_workers, eval_train, eval_skip, save, **kwargs)
+        self.model =  construct_model_from_experiment(self.modelfactory, self.optimal_experiment, self.optconfig[
+            "parameters"])
+        super(KerasTrainer, self).evaluate(metric, batch_size, num_workers, eval_train, eval_skip, save, **kwargs)
 
 
 def expscore(loss, val_loss):
